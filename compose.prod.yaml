@@ -1,0 +1,84 @@
+# FoodOrder production stack (project "foodorder-prod"): immutable images, no source bind mounts,
+# a dedicated network and SQLite volume. Meant for local/private demonstration (the app has no authentication).
+# Use scripts/prod/dcp.sh instead of calling `docker compose` directly.
+name: foodorder-prod
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+      target: app
+    image: foodorder-prod-app:latest
+    env_file: .env.prod
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      FOODORDER_ENV_PROD: ${FOODORDER_ENV_PROD:?set FOODORDER_ENV_PROD=1 in .env.prod}
+      # Laravel caches live in tmpfs and are rebuilt at every start with the real environment.
+      APP_CONFIG_CACHE: /tmp/cache/config.php
+      APP_ROUTES_CACHE: /tmp/cache/routes-v7.php
+      APP_SERVICES_CACHE: /tmp/cache/services.php
+      APP_EVENTS_CACHE: /tmp/cache/events.php
+    volumes:
+      - sqlite_data:/data
+    tmpfs:
+      - /tmp:mode=1777,size=64m
+      - /app/storage/framework:uid=10001,gid=10001,mode=0750,size=64m
+    read_only: true
+    healthcheck:
+      test: ["CMD-SHELL", "SCRIPT_NAME=/fpm-ping SCRIPT_FILENAME=/fpm-ping REQUEST_METHOD=GET cgi-fcgi -bind -connect 127.0.0.1:9000 | grep -q pong"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+    stop_grace_period: 30s
+    mem_limit: 512m
+    pids_limit: 256
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+      target: web
+    image: foodorder-prod-web:latest
+    ports:
+      - "127.0.0.1:${PROD_PORT:-8081}:8080"
+    depends_on:
+      app:
+        condition: service_healthy
+    tmpfs:
+      - /tmp:mode=1777,size=32m
+    read_only: true
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/up"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    stop_grace_period: 30s
+    mem_limit: 128m
+    pids_limit: 128
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  sqlite_data:
