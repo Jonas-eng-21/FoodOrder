@@ -4,9 +4,13 @@ namespace App\Models;
 
 use App\Enums\OrderStatus;
 use App\Patterns\Decorator\MenuItemDecorator;
+use App\Patterns\State\CancelledState;
+use App\Patterns\State\DeliveredState;
 use App\Patterns\State\OrderState;
 use App\Patterns\State\PaidState;
 use App\Patterns\State\PendingState;
+use App\Patterns\State\PreparingState;
+use App\Patterns\State\ReadyState;
 use App\Support\Money;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
@@ -43,6 +47,10 @@ class Order extends Model
         return match ($this->status) {
             OrderStatus::Pending => new PendingState,
             OrderStatus::Paid => new PaidState,
+            OrderStatus::Preparing => new PreparingState,
+            OrderStatus::Ready => new ReadyState,
+            OrderStatus::Delivered => new DeliveredState,
+            OrderStatus::Cancelled => new CancelledState,
         };
     }
 

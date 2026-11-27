@@ -4,7 +4,7 @@ namespace App\Patterns\State;
 
 use App\Enums\OrderStatus;
 
-/** State pattern — Concrete State: a new order awaiting payment. */
+/** State pattern — Concrete State: a new order awaiting payment. Allows pay (→ paid) and cancel (→ cancelled). */
 final class PendingState extends AbstractOrderState
 {
     public function status(): OrderStatus
@@ -12,13 +12,13 @@ final class PendingState extends AbstractOrderState
         return OrderStatus::Pending;
     }
 
-    public function canPay(): bool
-    {
-        return true;
-    }
-
     public function pay(): OrderState
     {
         return new PaidState;
+    }
+
+    public function cancel(): OrderState
+    {
+        return new CancelledState;
     }
 }
