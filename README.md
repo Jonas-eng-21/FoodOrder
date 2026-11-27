@@ -49,6 +49,15 @@ Na página do cardápio, **Fazer pedido** abre `GET /orders/create?product_id=..
 - **Demonstração:** crie um Hambúrguer com Bacon e Queijo extra: subtotal R$ 27,00 e descrição "Hambúrguer + Bacon + Queijo extra". Os testes `tests/Unit/Decorator/MenuItemDecoratorTest.php` mostram o encadeamento e a delegação.
 - O pedido guarda snapshots (nome do produto e complementos com preços); mudanças posteriores no catálogo não o alteram.
 
+### Cálculo de pagamento e padrão Strategy
+
+- **Problema:** o valor final depende do método de pagamento (PIX com 5% de desconto, cartão e dinheiro sem desconto, dinheiro com troco) e esses cálculos não ficam concentrados em um `switch`.
+- **Strategy** (`app/Patterns/Strategy/`): `PaymentStrategy` (Strategy, `calculate(int $subtotalCents, ?int $receivedCents): PaymentQuote`), `PixPaymentStrategy`, `CardPaymentStrategy` e `CashPaymentStrategy` (Concrete Strategies), `PaymentCalculator` (Context, apenas seleciona a estratégia do método e delega) e `PaymentQuote` (resultado imutável: subtotal, desconto, total, valor recebido e troco, em centavos).
+- **Regras:** PIX = `intdiv(subtotal * 95 + 50, 100)` (meio centavo arredonda para cima, ex.: 2010 → 1910); cartão = subtotal; dinheiro = subtotal, exige valor recebido suficiente e calcula o troco. Métodos desconhecidos, subtotal negativo e valor recebido ausente, negativo ou insuficiente são rejeitados (`InvalidPaymentException`). Tudo em inteiros, sem `float`.
+- **Estado atual:** as estratégias apenas calculam; ainda não há rota, tela ou pagamento (isso vem na US05). Calcular uma cotação não altera o pedido nem grava nada.
+- **Demonstração:** `docker compose exec app php artisan test --filter=Strategy` e `--filter=PaymentCalculator`. Para o subtotal 2700 do exemplo do Decorator: PIX = 2565, cartão = 2700, dinheiro (recebido 3000) = 2700 com troco 300.
+- **Papéis distintos:** Decorator compõe o subtotal do pedido; Strategy calcula as condições de pagamento sobre esse subtotal persistido; o **Adapter** (processamento por gateways simulados) ainda **não** foi implementado.
+
 ### Dados e testes
 
 - O banco SQLite fica no volume `sqlite_data` (`/data/database.sqlite`), separado do código.
