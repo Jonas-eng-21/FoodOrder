@@ -27,13 +27,41 @@
                 <dd class="col-sm-9 fw-semibold">{{ $order->formatted_subtotal }}</dd>
 
                 <dt class="col-sm-3">Estado</dt>
-                <dd class="col-sm-9"><span class="badge {{ $order->payment ? 'text-bg-success' : 'text-bg-warning' }}">{{ $order->status->value }}</span></dd>
+                <dd class="col-sm-9">
+                    @php($badge = match ($order->status) {
+                        \App\Enums\OrderStatus::Pending => 'text-bg-warning',
+                        \App\Enums\OrderStatus::Paid, \App\Enums\OrderStatus::Delivered => 'text-bg-success',
+                        \App\Enums\OrderStatus::Preparing, \App\Enums\OrderStatus::Ready => 'text-bg-info',
+                        \App\Enums\OrderStatus::Cancelled => 'text-bg-secondary',
+                    })
+                    <span class="badge {{ $badge }}">{{ $order->status->label() }}</span>
+                    <small class="text-body-secondary">({{ $order->status->value }})</small>
+                </dd>
             </dl>
         </div>
         <div class="card-footer bg-transparent">
             <a class="btn btn-outline-secondary" href="{{ route('menu.index') }}">Voltar ao cardápio</a>
         </div>
     </div>
+
+    @php($state = $order->state())
+    @if ($state->canStart() || $state->canReady() || $state->canDeliver() || $state->canCancel())
+        <div class="d-flex flex-wrap gap-2 mt-4">
+            @foreach ([
+                ['start', $state->canStart(), 'Iniciar preparo', 'btn-primary'],
+                ['ready', $state->canReady(), 'Finalizar preparo', 'btn-primary'],
+                ['deliver', $state->canDeliver(), 'Entregar pedido', 'btn-success'],
+                ['cancel', $state->canCancel(), 'Cancelar pedido', 'btn-outline-danger'],
+            ] as [$action, $allowed, $label, $class])
+                @if ($allowed)
+                    <form method="POST" action="{{ route('orders.'.$action, $order) }}">
+                        @csrf
+                        <button type="submit" class="btn {{ $class }}">{{ $label }}</button>
+                    </form>
+                @endif
+            @endforeach
+        </div>
+    @endif
 
     @if ($order->payment)
         @php($payment = $order->payment)
