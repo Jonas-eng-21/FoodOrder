@@ -8,31 +8,36 @@ class InvalidPaymentException extends DomainException
 {
     public static function negativeAmount(): self
     {
-        return new self('Monetary amounts cannot be negative.');
+        return new self('Valores monetários não podem ser negativos.');
     }
 
     public static function amountTooLarge(): self
     {
-        return new self('The amount is too large to be calculated safely.');
+        return new self('O valor é grande demais para ser calculado com segurança.');
     }
 
     public static function receivedAmountRequired(): self
     {
-        return new self('A received amount is required for cash payments.');
+        return new self('Informe o valor recebido para pagamento em dinheiro.');
     }
 
     public static function insufficientReceivedAmount(): self
     {
-        return new self('The received amount is lower than the total.');
+        return new self('O valor recebido é menor que o total a pagar.');
     }
 
     public static function inconsistentQuote(): self
     {
-        return new self('The payment quote is internally inconsistent.');
+        return new self('A cotação de pagamento é inconsistente.');
+    }
+
+    public static function inconsistentResult(): self
+    {
+        return new self('O resultado do processamento de pagamento é inconsistente.');
     }
 
     public static function unsupportedMethod(string $method): self
     {
-        return new self("Unsupported payment method: {$method}.");
+        return new self("Forma de pagamento não suportada: {$method}.");
     }
 }
