@@ -123,6 +123,14 @@ classDiagram
 - **Sem histórico retroativo:** pedidos criados antes da US07 (#1 a #9 do ambiente de desenvolvimento) não têm histórico nem notificações antigas; só as transições feitas a partir daí são registradas. Nenhum backfill foi feito.
 - **Padrões GoF implementados:** Decorator, Strategy, Adapter, State e Observer.
 
+### Navegação e acompanhamento de pedidos
+
+- **Navegação:** o cabeçalho tem **Cardápio** (`GET /`) e **Pedidos** (`GET /orders`); a página atual é destacada. Do cardápio, **Fazer pedido** abre o formulário de criação (com prévia opcional do subtotal; o valor final é sempre calculado no servidor).
+- **Listagem** (`GET /orders`): do mais recente ao mais antigo (`created_at` decrescente, desempate por `id` decrescente), com número, descrição (snapshot), subtotal, estado, data e link **Ver detalhes**. Sem pedidos, mostra uma orientação e um atalho para o cardápio. Horários em UTC.
+- **Detalhe** (`GET /orders/{id}`): *Composição do pedido* (produto, complementos e subtotal, a partir dos snapshots), *Pagamento* (forma, subtotal original, desconto, total pago, recebido, troco e referência simulada; formulário quando o pedido está pendente), *Ações do pedido* (somente as permitidas pelo estado atual), *Histórico do pedido* (linha do tempo cronológica) e *Notificações internas* (cliente e cozinha separadas). Pedidos anteriores à US07 podem não ter histórico; a tela mostra exatamente o que foi registrado.
+- **Roteiro de demonstração dos cinco padrões, só pela interface:** (1) em **Cardápio**, escolha Hambúrguer ou Cachorro-quente e marque Bacon e Queijo extra: o subtotal vem do **Decorator** (ex.: R$ 27,00); (2) no detalhe, escolha **PIX** (5% de desconto, **Strategy**: R$ 25,65) ou Dinheiro (informe o valor recebido para ver o troco) e confirme: o **Adapter** processa o gateway simulado e mostra a referência `SIMULATED-...`; (3) use **Iniciar preparo**, **Finalizar preparo** e **Entregar pedido**: o **State** só oferece a ação válida e recusa as demais (tente cancelar um pedido pago); (4) a cada transição o **Observer** acrescenta o histórico e os avisos de cliente e cozinha, visíveis no próprio detalhe; (5) volte à lista de **Pedidos** para ver o estado final.
+- A interface usa apenas Blade, Bootstrap 5 local e `public/css/foodorder.css`; funciona sem JavaScript (o JavaScript só oferece a prévia do subtotal e esconde o campo de dinheiro quando não se aplica).
+
 ### Dados e testes
 
 - O banco SQLite fica no volume `sqlite_data` (`/data/database.sqlite`), separado do código.
