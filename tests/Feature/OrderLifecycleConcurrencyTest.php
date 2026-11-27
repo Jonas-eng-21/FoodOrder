@@ -39,6 +39,7 @@ class OrderLifecycleConcurrencyTest extends TestCase
         $this->assertSame(['result' => 'rejected', 'action' => 'cancel', 'exception' => InvalidOrderTransitionException::class], $results[1], json_encode($results));
         $this->assertSame('paid', $this->scalar("select status from orders where id = {$orderId}"));
         $this->assertSame(1, (int) $this->scalar('select count(*) from payments'));
+        $this->assertSame([1, 1, 1], $this->effects(), 'Only the payment may produce effects (pending → paid).');
     }
 
     public function test_cancellation_that_wins_the_lock_rejects_the_payment_before_the_gateway(): void
@@ -55,6 +56,8 @@ class OrderLifecycleConcurrencyTest extends TestCase
         $this->assertSame('cancelled', $this->scalar("select status from orders where id = {$orderId}"));
         $this->assertSame(0, (int) $this->scalar('select count(*) from payments'), 'A cancelled order must never have an approved payment.');
         $this->assertFileDoesNotExist($this->marker, 'The gateway must not be called for a cancelled order.');
+        $this->assertSame([1, 1, 0], $this->effects(), 'Only the cancellation may produce effects (pending → cancelled).');
+        $this->assertSame('pending_to_cancelled', $this->scalar('select event_key from notifications'));
     }
 
     /** @return array<string, array{string, string, string}> action, initial status, final status */
@@ -81,5 +84,32 @@ class OrderLifecycleConcurrencyTest extends TestCase
         $this->assertSame(['done', 'rejected'], collect($results)->pluck('result')->sort()->values()->all(), json_encode($results));
         $this->assertSame(InvalidOrderTransitionException::class, collect($results)->firstWhere('result', 'rejected')['exception'], json_encode($results));
         $this->assertSame($final, $this->scalar("select status from orders where id = {$orderId}"));
+        $this->assertSame(1, (int) $this->scalar('select count(*) from order_histories'), 'The losing request must not add a history record.');
+        $this->assertSame(1, (int) $this->scalar("select count(*) from notifications where audience = 'customer'"));
+    }
+
+    public function test_a_failing_observer_rolls_everything_back_on_a_real_database_file(): void
+    {
+        $orderId = $this->prepareOrder('pending');
+
+        $results = $this->race($orderId, [['action' => 'pay', 'delay' => 0.0, 'sleepMs' => 0]], failingObserver: true);
+
+        $this->assertSame(['result' => 'rejected', 'action' => 'pay', 'exception' => \RuntimeException::class], $results[0], json_encode($results));
+        $this->assertSame('pending', $this->scalar("select status from orders where id = {$orderId}"));
+        $this->assertSame([0, 0, 0], [
+            (int) $this->scalar('select count(*) from payments'),
+            (int) $this->scalar('select count(*) from order_histories'),
+            (int) $this->scalar('select count(*) from notifications'),
+        ]);
+    }
+
+    /** @return array{int, int, int} histories, customer notifications, kitchen notifications */
+    private function effects(): array
+    {
+        return [
+            (int) $this->scalar('select count(*) from order_histories'),
+            (int) $this->scalar("select count(*) from notifications where audience = 'customer'"),
+            (int) $this->scalar("select count(*) from notifications where audience = 'kitchen'"),
+        ];
     }
 }

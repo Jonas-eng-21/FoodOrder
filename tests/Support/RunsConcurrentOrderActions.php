@@ -30,7 +30,7 @@ trait RunsConcurrentOrderActions
     }
 
     /** @return array<string, string> */
-    private function environment(?string $transactionMode = null): array
+    private function environment(?string $transactionMode = null, bool $failingObserver = false): array
     {
         return array_filter([
             'APP_ENV' => 'testing',
@@ -42,6 +42,7 @@ trait RunsConcurrentOrderActions
             'SESSION_DRIVER' => 'array',
             'LOG_CHANNEL' => 'null',
             'FOODORDER_TEST_GATEWAY_MARKER' => $this->marker,
+            'FOODORDER_TEST_FAILING_OBSERVER' => $failingObserver ? '1' : null,
         ]);
     }
 
@@ -73,15 +74,15 @@ trait RunsConcurrentOrderActions
      * @param  list<array{action: string, delay: float, sleepMs: int}>  $children  delay (seconds) is applied after the shared barrier
      * @return list<array<string, mixed>>
      */
-    private function race(int $orderId, array $children, ?string $transactionMode = null): array
+    private function race(int $orderId, array $children, ?string $transactionMode = null, bool $failingObserver = false): array
     {
         $barrier = microtime(true) + 2.0;
 
-        $processes = array_map(function (array $child) use ($orderId, $barrier, $transactionMode): Process {
+        $processes = array_map(function (array $child) use ($orderId, $barrier, $transactionMode, $failingObserver): Process {
             $process = new Process(
                 [PHP_BINARY, dirname(__DIR__).'/Support/order_action_process.php', (string) $orderId, (string) ($barrier + $child['delay']), (string) $child['sleepMs'], $child['action']],
                 dirname(__DIR__, 2),
-                $this->environment($transactionMode),
+                $this->environment($transactionMode, $failingObserver),
             );
             $process->start();
 

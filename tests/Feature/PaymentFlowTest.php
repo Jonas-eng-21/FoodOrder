@@ -11,6 +11,7 @@ use App\Patterns\Adapter\CashPaymentGateway;
 use App\Patterns\Adapter\LegacyCardGateway;
 use App\Patterns\Adapter\LegacyPixGateway;
 use App\Patterns\Adapter\PixGatewayAdapter;
+use App\Patterns\Observer\OrderEventPublisher;
 use App\Patterns\Strategy\PaymentCalculator;
 use App\Services\OrderService;
 use App\Services\PaymentService;
@@ -176,7 +177,7 @@ class PaymentFlowTest extends TestCase
             'pix' => new PixGatewayAdapter(new LegacyPixGateway(reject: true)),
             'card' => new CardGatewayAdapter(new LegacyCardGateway(reject: true)),
             'cash' => new CashPaymentGateway,
-        ]));
+        ], app(OrderEventPublisher::class)));
 
         $this->pay(['method' => 'pix'])->assertSessionHas('error');
         $this->pay(['method' => 'card'])->assertSessionHas('error');

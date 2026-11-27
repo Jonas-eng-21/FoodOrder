@@ -15,6 +15,9 @@ use App\Enums\PaymentMethod;
 use App\Models\Order;
 use App\Patterns\Adapter\PaymentGateway;
 use App\Patterns\Adapter\PaymentResult;
+use App\Patterns\Observer\OrderEventPublisher;
+use App\Patterns\Observer\OrderObserver;
+use App\Patterns\Observer\OrderStateChanged;
 use App\Patterns\Strategy\PaymentCalculator;
 use App\Services\OrderLifecycleService;
 use App\Services\PaymentService;
@@ -42,6 +45,17 @@ $gateway = new class((int) $sleepMs, getenv('FOODORDER_TEST_GATEWAY_MARKER') ?: 
     }
 };
 
+// Test hook: a last observer that always fails, to prove the rollback on a real database file.
+if (getenv('FOODORDER_TEST_FAILING_OBSERVER') === '1') {
+    $app->make(OrderEventPublisher::class)->subscribe(new class implements OrderObserver
+    {
+        public function update(OrderStateChanged $event): void
+        {
+            throw new RuntimeException('observer failure');
+        }
+    });
+}
+
 if ($action !== 'pay') {
     Order::saving(function () use ($sleepMs): void {
         usleep(((int) $sleepMs) * 1000);
@@ -56,7 +70,7 @@ try {
     $order = Order::query()->findOrFail((int) $orderId);
 
     if ($action === 'pay') {
-        (new PaymentService($app->make(PaymentCalculator::class), ['pix' => $gateway, 'card' => $gateway, 'cash' => $gateway]))
+        (new PaymentService($app->make(PaymentCalculator::class), ['pix' => $gateway, 'card' => $gateway, 'cash' => $gateway], $app->make(OrderEventPublisher::class)))
             ->pay($order, PaymentMethod::Pix);
     } else {
         $app->make(OrderLifecycleService::class)->{$action}($order);

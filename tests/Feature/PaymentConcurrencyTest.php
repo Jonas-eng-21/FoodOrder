@@ -36,6 +36,11 @@ class PaymentConcurrencyTest extends TestCase
 
         $this->assertSame(1, (int) $this->scalar('select count(*) from payments'), json_encode($results));
         $this->assertSame('paid', $this->scalar("select status from orders where id = {$orderId}"));
+        $this->assertSame([1, 1, 1], [
+            (int) $this->scalar('select count(*) from order_histories'),
+            (int) $this->scalar("select count(*) from notifications where audience = 'customer'"),
+            (int) $this->scalar("select count(*) from notifications where audience = 'kitchen'"),
+        ], 'Only the winning payment may produce effects.');
         $this->assertSame(['done', 'rejected'], collect($results)->pluck('result')->sort()->values()->all(), json_encode($results));
 
         // With BEGIN IMMEDIATE the loser waits for the lock, re-reads the order inside it and is turned

@@ -17,6 +17,7 @@ use App\Patterns\Adapter\LegacyPixGateway;
 use App\Patterns\Adapter\PaymentGateway;
 use App\Patterns\Adapter\PaymentResult;
 use App\Patterns\Adapter\PixGatewayAdapter;
+use App\Patterns\Observer\OrderEventPublisher;
 use App\Patterns\Strategy\PaymentCalculator;
 use App\Services\OrderService;
 use App\Services\PaymentService;
@@ -44,7 +45,7 @@ class PaymentServiceTest extends TestCase
     /** @param array<string, PaymentGateway> $gateways */
     private function service(array $gateways): PaymentService
     {
-        return new PaymentService(app(PaymentCalculator::class), $gateways);
+        return new PaymentService(app(PaymentCalculator::class), $gateways, app(OrderEventPublisher::class));
     }
 
     /** @return array<string, PaymentGateway> */

@@ -10,6 +10,7 @@ use App\Models\Payment;
 use App\Models\Product;
 use App\Patterns\Adapter\PaymentGateway;
 use App\Patterns\Adapter\PaymentResult;
+use App\Patterns\Observer\OrderEventPublisher;
 use App\Patterns\Strategy\PaymentCalculator;
 use App\Services\OrderLifecycleService;
 use App\Services\OrderService;
@@ -187,7 +188,7 @@ class OrderLifecycleServiceTest extends TestCase
                 return PaymentResult::approved('SIMULATED-TEST');
             }
         };
-        $service = new PaymentService(app(PaymentCalculator::class), ['pix' => $gateway, 'card' => $gateway, 'cash' => $gateway]);
+        $service = new PaymentService(app(PaymentCalculator::class), ['pix' => $gateway, 'card' => $gateway, 'cash' => $gateway], app(OrderEventPublisher::class));
 
         try {
             $service->pay($order, PaymentMethod::Pix);

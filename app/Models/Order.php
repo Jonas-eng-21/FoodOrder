@@ -4,6 +4,8 @@ namespace App\Models;
 
 use App\Enums\OrderStatus;
 use App\Patterns\Decorator\MenuItemDecorator;
+use App\Patterns\Observer\OrderEventPublisher;
+use App\Patterns\Observer\OrderStateChanged;
 use App\Patterns\State\CancelledState;
 use App\Patterns\State\DeliveredState;
 use App\Patterns\State\OrderState;
@@ -15,6 +17,7 @@ use App\Support\Money;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Order extends Model
@@ -41,6 +44,18 @@ class Order extends Model
         return $this->hasOne(Payment::class);
     }
 
+    /** @return HasMany<OrderHistory, $this> transitions in chronological order (id breaks ties) */
+    public function histories(): HasMany
+    {
+        return $this->hasMany(OrderHistory::class)->orderBy('created_at')->orderBy('id');
+    }
+
+    /** @return HasMany<Notification, $this> */
+    public function notifications(): HasMany
+    {
+        return $this->hasMany(Notification::class)->orderBy('id');
+    }
+
     /** State pattern — context: rehydrates the State object that matches the persisted status. */
     public function state(): OrderState
     {
@@ -59,11 +74,18 @@ class Order extends Model
         return $this->state()->canPay();
     }
 
-    /** Persists the status of the given (already validated) next state. */
-    public function transitionTo(OrderState $state): void
+    /**
+     * The single point where a validated transition is applied: persists the new status and then
+     * publishes one OrderStateChanged so the subscribed observers run in the caller's transaction.
+     */
+    public function transitionTo(OrderState $state, OrderEventPublisher $publisher): void
     {
+        $previous = $this->status;
+
         $this->status = $state->status();
         $this->save();
+
+        $publisher->notify(new OrderStateChanged($this->id, $previous, $this->status));
     }
 
     /**

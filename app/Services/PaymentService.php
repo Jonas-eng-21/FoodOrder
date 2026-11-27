@@ -10,13 +10,15 @@ use App\Models\Order;
 use App\Models\Payment;
 use App\Patterns\Adapter\PaymentGateway;
 use App\Patterns\Adapter\PaymentResult;
+use App\Patterns\Observer\OrderEventPublisher;
 use App\Patterns\Strategy\PaymentCalculator;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /**
  * Orchestrates the simulated payment: State (eligibility/transition) → Strategy (quote) →
- * Adapter (gateway) → persistence. It knows only the PaymentGateway contract.
+ * Adapter (gateway) → persistence → Observer (via Order::transitionTo, same transaction).
+ * It knows only the PaymentGateway contract and the publisher.
  *
  * Concurrency (SQLite): the whole operation runs in a transaction opened with BEGIN IMMEDIATE
  * (config/database.php, transaction_mode), which takes the database write lock up front. A competing
@@ -29,6 +31,7 @@ class PaymentService
     public function __construct(
         private readonly PaymentCalculator $calculator,
         private readonly array $gateways,
+        private readonly OrderEventPublisher $events,
     ) {}
 
     /**
@@ -59,7 +62,7 @@ class PaymentService
                 'simulated_reference' => $result->reference,
             ]);
 
-            $order->transitionTo($nextState);
+            $order->transitionTo($nextState, $this->events);
 
             return $payment;
         });

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Exceptions\InvalidOrderTransitionException;
 use App\Models\Order;
+use App\Patterns\Observer\OrderEventPublisher;
 use App\Patterns\State\OrderState;
 use Closure;
 use Illuminate\Support\Facades\DB;
@@ -17,6 +18,8 @@ use Illuminate\Support\Facades\DB;
  */
 class OrderLifecycleService
 {
+    public function __construct(private readonly OrderEventPublisher $events) {}
+
     /** @throws InvalidOrderTransitionException */
     public function start(Order $order): Order
     {
@@ -47,7 +50,7 @@ class OrderLifecycleService
         return DB::transaction(function () use ($order, $operation): Order {
             $order = Order::query()->findOrFail($order->getKey());
 
-            $order->transitionTo($operation($order->state()));
+            $order->transitionTo($operation($order->state()), $this->events);
 
             return $order;
         });
