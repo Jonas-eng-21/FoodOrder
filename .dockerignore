@@ -20,6 +20,10 @@ skills-lock.json
 *.sqlite-shm
 *.db
 
+# Tests and operational scripts are not part of any image
+tests/
+scripts/
+
 # Dependencies, caches, logs, backups and certificates
 vendor/
 node_modules/
