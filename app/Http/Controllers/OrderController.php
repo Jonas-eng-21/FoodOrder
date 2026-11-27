@@ -13,6 +13,13 @@ use Illuminate\View\View;
 
 class OrderController extends Controller
 {
+    public function index(): View
+    {
+        return view('orders.index', [
+            'orders' => Order::query()->orderByDesc('created_at')->orderByDesc('id')->get(),
+        ]);
+    }
+
     public function create(Request $request, ExtraCatalog $catalog): View|RedirectResponse
     {
         $productId = $request->query('product_id');

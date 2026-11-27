@@ -56,7 +56,7 @@ class OrderFlowTest extends TestCase
             ->assertOk()
             ->assertSee('Batata frita')
             ->assertDontSee('Bacon')
-            ->assertDontSee('name="extras[]"', false);
+            ->assertDontSee('type="checkbox"', false);
     }
 
     public function test_form_rejects_inactive_nonexistent_and_missing_products(): void
@@ -185,7 +185,9 @@ class OrderFlowTest extends TestCase
 
     public function test_orders_cannot_be_created_through_get(): void
     {
-        $this->get('/orders')->assertStatus(405);
+        // GET /orders is the read-only listing since US08: it must never create anything.
+        $this->get('/orders')->assertOk();
+        $this->get('/orders/create?product_id=1')->assertOk();
         $this->assertSame(0, Order::query()->count());
     }
 }
