@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Order;
+use App\Models\Payment;
 use App\Models\Product;
 use App\Patterns\Strategy\PaymentCalculator;
 use App\Services\OrderService;
@@ -39,6 +40,7 @@ class PaymentQuoteOrderTest extends TestCase
         $this->assertSame($before, Order::query()->findOrFail($order->id)->getAttributes());
         $this->assertSame('pending', $order->fresh()->status->value);
         $this->assertSame(1, Order::query()->count());
+        $this->assertSame(0, Payment::query()->count());
     }
 
     public function test_catalog_changes_do_not_affect_quotes_of_existing_orders(): void
