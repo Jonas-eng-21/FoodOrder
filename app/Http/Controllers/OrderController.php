@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\NotificationAudience;
 use App\Http\Requests\StoreOrderRequest;
 use App\Models\Order;
 use App\Models\Product;
@@ -48,6 +49,12 @@ class OrderController extends Controller
 
     public function show(Order $order): View
     {
-        return view('orders.show', ['order' => $order->load('payment')]);
+        $order->load(['payment', 'histories', 'notifications']);
+
+        return view('orders.show', [
+            'order' => $order,
+            'customerNotifications' => $order->notifications->where('audience', NotificationAudience::Customer)->values(),
+            'kitchenNotifications' => $order->notifications->where('audience', NotificationAudience::Kitchen)->values(),
+        ]);
     }
 }

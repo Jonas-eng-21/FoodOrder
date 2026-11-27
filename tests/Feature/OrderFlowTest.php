@@ -86,7 +86,7 @@ class OrderFlowTest extends TestCase
             ->assertOk()
             ->assertSee('Hambúrguer + Bacon + Queijo extra + Ovo')
             ->assertSee('R$ 29,00')
-            ->assertSee('pending');
+            ->assertSee('Aguardando pagamento');
     }
 
     public function test_order_without_extras_is_pending_with_base_price(): void

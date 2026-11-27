@@ -53,7 +53,7 @@ class Order extends Model
     /** @return HasMany<Notification, $this> */
     public function notifications(): HasMany
     {
-        return $this->hasMany(Notification::class)->orderBy('id');
+        return $this->hasMany(Notification::class)->orderBy('created_at')->orderBy('id');
     }
 
     /** State pattern — context: rehydrates the State object that matches the persisted status. */
@@ -99,6 +99,16 @@ class Order extends Model
             MenuItemDecorator::SEPARATOR,
             [$this->product_name_snapshot, ...array_column($this->extras_snapshot, 'name')],
         ));
+    }
+
+    /**
+     * Base product price at creation time, derived from the stored snapshots (subtotal minus extras).
+     *
+     * @return Attribute<int, never>
+     */
+    protected function basePriceCents(): Attribute
+    {
+        return Attribute::get(fn (): int => $this->subtotal_cents - array_sum(array_column($this->extras_snapshot, 'price_cents')));
     }
 
     /** @return Attribute<string, never> */

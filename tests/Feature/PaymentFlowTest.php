@@ -70,7 +70,7 @@ class PaymentFlowTest extends TestCase
 
         $this->get(route('orders.show', $this->order))
             ->assertOk()
-            ->assertSee('paid')
+            ->assertSee('Pago')
             ->assertSee('R$ 25,65')
             ->assertSee('R$ 1,35')
             ->assertSee($payment->simulated_reference)
