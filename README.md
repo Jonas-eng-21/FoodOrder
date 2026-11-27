@@ -137,6 +137,85 @@ classDiagram
 - Os testes usam `APP_ENV=testing` e SQLite `:memory:` (forçados em `phpunit.xml`), sem tocar o banco de desenvolvimento.
 - Bootstrap 5 é servido localmente em `public/vendor/bootstrap` (licença MIT incluída); não há Node, Vite nem CDN.
 
+## Ambiente de produção (Docker)
+
+Stack independente e imutável para demonstração **local ou em rede privada controlada**: PHP-FPM 8.4 + Nginx, código incorporado às imagens, SQLite em volume próprio. O FoodOrder **não tem autenticação**: não exponha esta stack à internet (veja *Limites de segurança*).
+
+```mermaid
+flowchart LR
+    B[Navegador] -->|127.0.0.1:8081| W
+    subgraph foodorder-prod [projeto Compose foodorder-prod · rede foodorder-prod_default]
+        W[web · Nginx 8080 · public/ da imagem] -->|FastCGI app:9000| A[app · PHP-FPM · usuário app]
+        A --- V[(volume foodorder-prod_sqlite_data → /data)]
+    end
+    subgraph foodorder [projeto foodorder · desenvolvimento]
+        D[app · artisan serve · bind mount] --- DV[(volume foodorder_sqlite_data)]
+    end
+```
+
+| | Desenvolvimento | Produção |
+|---|---|---|
+| Projeto / arquivo Compose | `foodorder` / `compose.yaml` | `foodorder-prod` / `compose.prod.yaml` |
+| Configuração | `.env` | `.env.prod` (marcador `FOODORDER_ENV_PROD=1`) |
+| Porta local | `DEV_PORT` (8080 no exemplo) | `PROD_PORT` (8081), sempre em `127.0.0.1` |
+| Serviços | `app` (`artisan serve`) | `app` (PHP-FPM, sem porta publicada) e `web` (Nginx) |
+| Código | bind mount (`.:/app`) | incorporado à imagem, sem bind mount; raiz somente leitura |
+| Dependências Composer | com dev (volume `vendor_data`) | `--no-dev`, autoloader otimizado, sem Composer na imagem |
+| Banco SQLite | volume `foodorder_sqlite_data` | volume `foodorder-prod_sqlite_data` |
+| `APP_ENV` / `APP_DEBUG` | `local` / `true` | `production` / `false` (fixos no Compose) |
+| `APP_KEY` | a sua (dev) | outra, gerada à parte (nunca na imagem nem no Git) |
+
+**Pré-requisitos:** Docker Engine e Compose v2. Nada de PHP, Composer ou Node no host.
+
+### Subir a produção
+
+```bash
+cp .env.prod.example .env.prod          # se a porta 8081 estiver ocupada, ajuste PROD_PORT e APP_URL
+scripts/prod/dcp.sh build               # constrói as imagens foodorder-prod-app e foodorder-prod-web
+scripts/prod/dcp.sh init-key            # grava uma APP_KEY nova em .env.prod (sem exibi-la; recusa se já existir)
+scripts/prod/dcp.sh up -d --build
+scripts/prod/dcp.sh ps                  # app e web devem ficar "healthy"
+```
+
+Acesse `http://127.0.0.1:8081` (healthcheck: `http://127.0.0.1:8081/up`). Na primeira subida o container `app` valida o ambiente, cria o SQLite em `/data`, aplica as migrations pendentes (`migrate --force`, nunca reset), executa o seed idempotente do catálogo (3 produtos, sem duplicar nem apagar pedidos) e gera os caches do Laravel com o ambiente real; qualquer falha impede o serviço de ficar saudável. O `web` só inicia depois que o `app` está saudável.
+
+### Operação
+
+```bash
+scripts/prod/dcp.sh logs -f app         # logs (app e/ou web); erros de startup aparecem aqui
+scripts/prod/dcp.sh restart             # reinicia preservando os dados
+scripts/prod/dcp.sh down                # remove containers e rede; o volume do SQLite é sempre preservado
+scripts/prod/dcp.sh up -d --build       # após atualizar o código: reconstrói as imagens e recria os containers
+scripts/prod/dcp.sh config --quiet      # valida a configuração (sem imprimir segredos)
+```
+
+- **Atualização:** `git pull` e `scripts/prod/dcp.sh up -d --build`; as migrations novas rodam sozinhas na subida. Alterar o código local sem reconstruir as imagens **não** afeta a produção.
+- **Persistência:** `restart`, `down` + `up` e `up --force-recreate` mantêm pedidos, pagamentos, histórico e notificações. As sessões ficam em tmpfs e são perdidas ao reiniciar (formulários abertos exigem recarregar a página).
+- **Backup consistente do SQLite** (com a stack no ar; não copie o arquivo "no braço"):
+
+```bash
+docker exec foodorder-prod-app-1 php -r '(new PDO("sqlite:/data/database.sqlite"))->exec("VACUUM INTO \"/data/backup.sqlite\"");'
+docker cp foodorder-prod-app-1:/data/backup.sqlite ./backup.sqlite && docker exec foodorder-prod-app-1 rm /data/backup.sqlite
+```
+
+  Restauração (com `scripts/prod/dcp.sh down` antes e validação de integridade depois): copie o arquivo para o volume `foodorder-prod_sqlite_data` como `database.sqlite` com um container temporário rodando como `--user 10001:10001`, confira com `PRAGMA integrity_check` e suba a stack. Não versione backups.
+- **Isolamento:** produção e desenvolvimento podem rodar juntas (portas, redes, volumes, bancos e chaves distintos); subir, reiniciar ou derrubar uma não afeta a outra.
+
+### `scripts/prod/dcp.sh`
+
+Ponto de entrada recomendado: usa sempre `compose.prod.yaml`, `.env.prod` e o projeto `foodorder-prod`; recusa ambientes incoerentes (marcador, `APP_ENV`, `APP_DEBUG`, variáveis exportadas no shell que conflitem com `.env.prod`); ignora `COMPOSE_*` herdados; aceita apenas `config`, `build`, `up`, `ps`, `logs`, `restart`, `start`, `stop`, `down`, `images`, `top` e `init-key` com flags de uma lista permitida e serviços `app`/`web`. **Recusa:** `down -v`/`--volumes` e variações (inclusive combinadas), `up -V`/`--renew-anon-volumes`, `run`, `exec`, `rm`, `cp`, `-f`/`-p`/`--env-file` e demais overrides, `volume rm`, `system prune`. Ele protege contra erros operacionais; **não** impede quem chama `docker` diretamente. Nunca execute `docker system prune`, `docker volume prune` ou `docker compose down -v` neste projeto.
+
+### Limites de segurança
+
+A stack publica só `127.0.0.1`, roda sem root, com raiz somente leitura, `cap_drop: ALL`, `no-new-privileges`, limites de memória e Nginx servindo apenas `public/` (arquivos internos, `.env` e bancos respondem 404). **Não há autenticação, autorização nem TLS configurado:** uma exposição pública exigiria avaliar autenticação, TLS e segurança operacional antes (fora do escopo deste MVP).
+
+### Problemas comuns
+
+- *`.env.prod not found`*: `cp .env.prod.example .env.prod`. *`APP_KEY is missing`*: `scripts/prod/dcp.sh build && scripts/prod/dcp.sh init-key`.
+- *Porta 8081 em uso*: altere `PROD_PORT` (e `APP_URL`) em `.env.prod`; não interrompa outros serviços.
+- *`conflicts with .env.prod`*: há uma variável exportada no shell (ex.: `APP_ENV`); rode `unset NOME`.
+- *`app` não fica saudável*: `scripts/prod/dcp.sh logs app` (falha de validação de ambiente, migration ou permissão do volume).
+
 ## Documentação de desenvolvimento
 
 O contexto e o histórico locais de desenvolvimento ficam em `context/`, pasta ignorada pelo Git e excluída do contexto de build do Docker.
