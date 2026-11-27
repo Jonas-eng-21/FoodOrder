@@ -21,7 +21,7 @@ docker compose up --build -d
 
 A aplicação fica em `http://localhost:8080` (porta e endereço configuráveis por `DEV_PORT` e `DEV_BIND_ADDRESS` no `.env`; por padrão publica apenas em `127.0.0.1`). Se a porta 8080 já estiver em uso, altere `DEV_PORT` e `APP_URL` no `.env` antes do `up`.
 
-Na inicialização o container verifica as guardas de ambiente (`APP_ENV=local` e ausência da marca de produção), sincroniza o `vendor` com o `composer.lock` (sem `composer update`), cria o arquivo SQLite se necessário e executa as migrations de forma segura. A `APP_KEY` nunca é gerada ou regenerada automaticamente.
+Na inicialização o container verifica as guardas de ambiente (`APP_ENV=local` e ausência da marca de produção), sincroniza o `vendor` com o `composer.lock` (sem `composer update`), cria o arquivo SQLite se necessário, executa as migrations de forma segura e roda o seed idempotente do catálogo (`CatalogSeeder`: cria apenas os produtos ausentes, sem duplicar nem sobrescrever dados existentes). A `APP_KEY` nunca é gerada ou regenerada automaticamente.
 
 ### Comandos úteis
 
@@ -35,6 +35,10 @@ docker compose down
 ```
 
 `docker compose down` preserva os volumes (`sqlite_data` e `vendor_data`). `docker compose down -v` apaga os dados de desenvolvimento e só deve ser usado deliberadamente.
+
+### Cardápio
+
+`GET /` lista os produtos ativos (hambúrguer R$ 20,00, cachorro-quente R$ 15,00 e batata frita R$ 10,00); sem produtos ativos exibe uma mensagem. Para repetir o seed manualmente: `docker compose exec app php artisan db:seed` (idempotente).
 
 ### Dados e testes
 
