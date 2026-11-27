@@ -67,9 +67,31 @@ No detalhe de um pedido `pending` há o formulário de pagamento (`POST /orders/
 - **Problema do Adapter:** dois "gateways legados" têm contratos incompatíveis: `LegacyPixGateway::sendPix(int $amountCents): array` (ex.: `['status' => 'CONFIRMED', 'txid' => 'SIMULATED-PIX-...', 'amount_cents' => 2565]`) e `LegacyCardGateway::charge(string $amountDecimal): string` (ex.: `"APPROVED|SIMULATED-CARD-...|27.00"`).
 - **Participantes** (`app/Patterns/Adapter/`): `PaymentGateway` (Target, `charge(int $totalCents): PaymentResult`), `LegacyPixGateway` e `LegacyCardGateway` (Adaptees, não modificados), `PixGatewayAdapter` e `CardGatewayAdapter` (Adapters: convertem centavos em decimal com inteiros, ex.: `2565` → `"25.65"`, e traduzem a resposta legada; respostas inesperadas nunca são aprovação), `CashPaymentGateway` (implementa o Target diretamente: dinheiro não tem API incompatível) e `PaymentResult` (aprovado + referência, ou rejeitado + erro).
 - **Integração dos padrões:** Decorator → subtotal persistido do pedido; Strategy (`PaymentCalculator`) → cotação; Adapter (`PaymentGateway`) → processamento simulado; State → elegibilidade e transição `pending → paid`; tudo coordenado por `PaymentService` em uma única transação.
-- **State (parcial):** `OrderState`, `AbstractOrderState`, `PendingState` e `PaidState` (`app/Patterns/State/`); `Order::state()` reidrata o estado a partir do status persistido. Os demais estados e transições (preparo, entrega, cancelamento) ficam para a US06.
+- **State:** o pagamento usa o State para verificar a elegibilidade antes do gateway e para a transição `pending → paid` (detalhes na seção seguinte).
 - **Concorrência (SQLite):** o pagamento roda em transação `BEGIN IMMEDIATE` (`transaction_mode` em `config/database.php`, com `busy_timeout`), relê o pedido dentro do lock e `payments.order_id` é `UNIQUE`. O teste `PaymentConcurrencyTest` usa dois processos PHP reais sobre um SQLite temporário.
 - **Demonstração:** `docker compose exec app php artisan test --filter=Adapter`, `--filter=PaymentService` e `--filter=PaymentConcurrency`.
+
+### Ciclo de vida do pedido e padrão State
+
+- **Problema:** as operações permitidas dependem do estado do pedido (não se cancela um pedido pago, não se entrega um pedido pendente, pedidos entregues/cancelados não mudam mais) e isso não fica espalhado em `if`/`switch`.
+- **Participantes** (`app/Patterns/State/`): `Order` (Context; `state()` reidrata a classe a partir do status persistido e `transitionTo()` aplica a transição), `OrderState` (State: `pay`, `start`, `ready`, `deliver`, `cancel`, mais `can*` derivados), `AbstractOrderState` (rejeita tudo por padrão com `InvalidOrderTransitionException`) e os estados concretos `PendingState`, `PaidState`, `PreparingState`, `ReadyState`, `DeliveredState` e `CancelledState`. `OrderStatus` apenas nomeia os valores persistidos. As operações dos estados são puras (devolvem o próximo estado ou lançam exceção); `PaymentService` e `OrderLifecycleService` abrem a transação, relêem o pedido e aplicam o resultado.
+- **Rotas:** `POST /orders/{order}/pay|start|ready|deliver|cancel`. O detalhe do pedido mostra só as ações permitidas, mas o backend rejeita qualquer POST inválido.
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending
+    pending --> paid: pagamento aprovado
+    pending --> cancelled: cancelar
+    paid --> preparing: iniciar preparo
+    preparing --> ready: finalizar preparo
+    ready --> delivered: entregar
+    delivered --> [*]
+    cancelled --> [*]
+```
+
+- **Demonstração do ciclo completo:** crie um pedido, pague (PIX, cartão ou dinheiro), depois use **Iniciar preparo**, **Finalizar preparo** e **Entregar pedido**. **Cancelamento:** em um pedido pendente use **Cancelar pedido**; depois disso (ou após o pagamento) qualquer cancelamento, pagamento ou avanço é rejeitado com mensagem, sem alterar dados.
+- **Testes:** `docker compose exec app php artisan test --filter=OrderState` (matriz de 30 combinações e reidratação), `--filter=OrderLifecycle` (serviço, HTTP e concorrência).
+- Decorator compõe o subtotal, Strategy calcula o pagamento, Adapter processa o gateway simulado e State controla as transições. Histórico de transições e notificações (Observer) **ainda não** foram implementados.
 
 ### Dados e testes
 
