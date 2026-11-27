@@ -15,6 +15,9 @@
                     <h2 class="h5 card-title mb-0">{{ $product->name }}</h2>
                     <span class="fs-5 fw-semibold">{{ $product->formatted_price }}</span>
                 </div>
+                <div class="card-footer bg-transparent">
+                    <a class="btn btn-primary w-100" href="{{ route('orders.create', ['product_id' => $product->id]) }}">Fazer pedido</a>
+                </div>
             </div>
         </div>
         @if ($loop->last)
