@@ -41,6 +41,6 @@ class OrderController extends Controller
 
     public function show(Order $order): View
     {
-        return view('orders.show', ['order' => $order]);
+        return view('orders.show', ['order' => $order->load('payment')]);
     }
 }
