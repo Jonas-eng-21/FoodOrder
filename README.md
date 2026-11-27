@@ -40,6 +40,15 @@ docker compose down
 
 `GET /` lista os produtos ativos (hambúrguer R$ 20,00, cachorro-quente R$ 15,00 e batata frita R$ 10,00); sem produtos ativos exibe uma mensagem. Para repetir o seed manualmente: `docker compose exec app php artisan db:seed` (idempotente).
 
+### Pedidos e padrão Decorator
+
+Na página do cardápio, **Fazer pedido** abre `GET /orders/create?product_id=...`; o formulário (`POST /orders`) permite escolher complementos e, ao confirmar, redireciona para o detalhe `GET /orders/{id}`. O pedido nasce `pending`; preço, descrição e estado são sempre calculados no servidor (valores enviados pelo navegador são ignorados).
+
+- Complementos (fonte única em `config/foodorder.php`): Bacon R$ 4,00, Queijo extra R$ 3,00 e Ovo R$ 2,00, para hambúrguer e cachorro-quente; batata frita não aceita complementos; cada complemento no máximo uma vez.
+- **Problema:** combinar complementos sem criar uma subclasse para cada combinação. **Decorator** (`app/Patterns/Decorator/`): `MenuItem` (Component), `BaseMenuItem` (Concrete Component), `MenuItemDecorator` (Decorator) e `BaconDecorator`, `CheeseDecorator`, `EggDecorator` (Concrete Decorators). `OrderService` encadeia os decorators e o subtotal e a descrição do pedido vêm dessa composição.
+- **Demonstração:** crie um Hambúrguer com Bacon e Queijo extra: subtotal R$ 27,00 e descrição "Hambúrguer + Bacon + Queijo extra". Os testes `tests/Unit/Decorator/MenuItemDecoratorTest.php` mostram o encadeamento e a delegação.
+- O pedido guarda snapshots (nome do produto e complementos com preços); mudanças posteriores no catálogo não o alteram.
+
 ### Dados e testes
 
 - O banco SQLite fica no volume `sqlite_data` (`/data/database.sqlite`), separado do código.
