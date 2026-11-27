@@ -4,10 +4,14 @@ namespace App\Models;
 
 use App\Enums\OrderStatus;
 use App\Patterns\Decorator\MenuItemDecorator;
+use App\Patterns\State\OrderState;
+use App\Patterns\State\PaidState;
+use App\Patterns\State\PendingState;
 use App\Support\Money;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Order extends Model
 {
@@ -26,6 +30,32 @@ class Order extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function payment(): HasOne
+    {
+        return $this->hasOne(Payment::class);
+    }
+
+    /** State pattern — context: rehydrates the State object that matches the persisted status. */
+    public function state(): OrderState
+    {
+        return match ($this->status) {
+            OrderStatus::Pending => new PendingState,
+            OrderStatus::Paid => new PaidState,
+        };
+    }
+
+    public function canBePaid(): bool
+    {
+        return $this->state()->canPay();
+    }
+
+    /** Persists the status of the given (already validated) next state. */
+    public function transitionTo(OrderState $state): void
+    {
+        $this->status = $state->status();
+        $this->save();
     }
 
     /**
