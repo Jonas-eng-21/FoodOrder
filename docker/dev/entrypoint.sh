@@ -34,7 +34,7 @@ if [ ! -f bootstrap/cache/packages.php ]; then
     php artisan package:discover --ansi
 fi
 
-# --- Server mode only: require key, migrate safely -----------------------------
+# --- Server mode only: require key, migrate and seed safely -----------------------------
 if [ "${1:-}" = "php" ] && [ "${2:-}" = "artisan" ] && [ "${3:-}" = "serve" ]; then
     if [ -z "${APP_KEY:-}" ]; then
         echo "ERROR: APP_KEY is empty. Generate one with:" >&2
@@ -43,6 +43,7 @@ if [ "${1:-}" = "php" ] && [ "${2:-}" = "artisan" ] && [ "${3:-}" = "serve" ]; t
         exit 1
     fi
     php artisan migrate --no-interaction
+    php artisan db:seed --no-interaction
 fi
 
 exec "$@"
