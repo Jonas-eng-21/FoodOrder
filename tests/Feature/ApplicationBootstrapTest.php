@@ -2,11 +2,14 @@
 
 namespace Tests\Feature;
 
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class ApplicationBootstrapTest extends TestCase
 {
+    use RefreshDatabase;
+
     public function test_home_page_renders_the_base_layout_with_local_bootstrap(): void
     {
         $response = $this->get('/');
