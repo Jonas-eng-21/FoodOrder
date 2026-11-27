@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Money;
 use Database\Factories\ProductFactory;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
@@ -39,10 +40,6 @@ class Product extends Model
      */
     protected function formattedPrice(): Attribute
     {
-        return Attribute::get(fn (): string => sprintf(
-            'R$ %s,%02d',
-            number_format(intdiv($this->base_price_cents, 100), 0, '', '.'),
-            $this->base_price_cents % 100,
-        ));
+        return Attribute::get(fn (): string => Money::format($this->base_price_cents));
     }
 }
