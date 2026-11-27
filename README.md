@@ -91,7 +91,37 @@ stateDiagram-v2
 
 - **Demonstração do ciclo completo:** crie um pedido, pague (PIX, cartão ou dinheiro), depois use **Iniciar preparo**, **Finalizar preparo** e **Entregar pedido**. **Cancelamento:** em um pedido pendente use **Cancelar pedido**; depois disso (ou após o pagamento) qualquer cancelamento, pagamento ou avanço é rejeitado com mensagem, sem alterar dados.
 - **Testes:** `docker compose exec app php artisan test --filter=OrderState` (matriz de 30 combinações e reidratação), `--filter=OrderLifecycle` (serviço, HTTP e concorrência).
-- Decorator compõe o subtotal, Strategy calcula o pagamento, Adapter processa o gateway simulado e State controla as transições. Histórico de transições e notificações (Observer) **ainda não** foram implementados.
+- Decorator compõe o subtotal, Strategy calcula o pagamento, Adapter processa o gateway simulado e State controla as transições. O Observer (próxima seção) registra histórico e notificações a cada transição válida.
+
+### Histórico e notificações internas (Observer)
+
+- **Problema:** cada mudança válida de estado deve gerar efeitos independentes (histórico, aviso ao cliente, aviso à cozinha) sem que o pedido ou os serviços conheçam seus destinatários.
+- **Participantes** (`app/Patterns/Observer/`): `OrderStateChanged` (evento imutável: `orderId`, `previousStatus`, `newStatus`), `OrderObserver` (Observer: `update(OrderStateChanged): void`), `OrderEventPublisher` (Subject: `subscribe`, `unsubscribe`, `notify`; uma entrada por instância, notificação síncrona em ordem de inscrição, exceções propagadas) e os observadores concretos `HistoryObserver` (grava em `order_histories`), `CustomerNotificationObserver` (grava aviso `customer` em toda transição) e `KitchenNotificationObserver` (grava aviso `kitchen` só quando o novo estado é `paid` ou `ready`; a própria classe decide).
+- **Composição:** `AppServiceProvider` cria um único `OrderEventPublisher` e inscreve os três observadores; model e serviços só conhecem o publisher. `Order::transitionTo()` é o ponto único de publicação (um evento por transição), chamado por `PaymentService` e `OrderLifecycleService`.
+- **Atomicidade:** estado, pagamento (quando houver), histórico e notificações são gravados na mesma transação `BEGIN IMMEDIATE`; qualquer falha de observador reverte tudo (nada é publicado depois do commit). Unicidade no banco: `order_histories (order_id, new_status)` e `notifications (order_id, event_key, audience)`; `event_key` tem o formato `pending_to_paid`.
+- **Efeitos por transição** (criação do pedido, pagamento rejeitado e operação inválida não geram nada):
+
+| Transição | Histórico | Cliente | Cozinha |
+|---|---:|---:|---:|
+| `pending → paid` | 1 | 1 | 1 |
+| `paid → preparing` | 1 | 1 | 0 |
+| `preparing → ready` | 1 | 1 | 1 |
+| `ready → delivered` | 1 | 1 | 0 |
+| `pending → cancelled` | 1 | 1 | 0 |
+
+```mermaid
+classDiagram
+    OrderObserver <|.. HistoryObserver
+    OrderObserver <|.. CustomerNotificationObserver
+    OrderObserver <|.. KitchenNotificationObserver
+    OrderEventPublisher o-- OrderObserver : subscribe / unsubscribe
+    OrderEventPublisher ..> OrderStateChanged : notify
+    Order ..> OrderEventPublisher : transitionTo
+```
+
+- **Demonstração:** crie um pedido e percorra pagar → iniciar → finalizar → entregar; ao final há 4 históricos e 6 notificações (4 cliente + 2 cozinha), consultáveis no banco (ainda não há tela; a listagem vem na US08). Testes: `docker compose exec app php artisan test --filter=Observer` (inclui rollback e concorrência real).
+- **Sem histórico retroativo:** pedidos criados antes da US07 (#1 a #9 do ambiente de desenvolvimento) não têm histórico nem notificações antigas; só as transições feitas a partir daí são registradas. Nenhum backfill foi feito.
+- **Padrões GoF implementados:** Decorator, Strategy, Adapter, State e Observer.
 
 ### Dados e testes
 
