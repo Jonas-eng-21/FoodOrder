@@ -8,11 +8,9 @@ class DatabaseSeeder extends Seeder
 {
     /**
      * Seed the application's database.
-     *
-     * The idempotent catalog seed is introduced by US02.
      */
     public function run(): void
     {
-        //
+        $this->call(CatalogSeeder::class);
     }
 }
